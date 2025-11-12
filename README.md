@@ -506,11 +506,6 @@ while True:
 
 本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
 
-## 👥 作者
-
-- **项目开发**: Your Name
-- **算法设计**: Claude Code
-- **硬件设计**: Your Name
 
 ## 🙏 致谢
 
