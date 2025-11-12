@@ -142,7 +142,7 @@ MAX30102/
 - ⚡ 特点: 快速响应（~5秒），低内存（~2KB）
 - 🎯 适用: 需要快速响应的实时监测场景
 
-### **方法 2: 频域DPT变换算法** (新增)
+### **方法 2: 频域DPT变换算法** (新增-未校验)
 - 📁 文件: `ppg_algorithm_v2.c/h`
 - 📖 参考: [Analog Devices RAQ-230](https://www.analog.com/cn/resources/analog-dialogue/raqs/raq-issue-230.html)
 - ⚡ 特点: 高精度（~10秒），中等内存（~8KB）
@@ -512,12 +512,6 @@ while True:
 - STMicroelectronics - HAL 库
 - Maxim Integrated - MAX30102 数据手册
 - 开源社区的各位贡献者
-
-## 📞 联系方式
-
-- Email: your.email@example.com
-- GitHub: [@your-username](https://github.com/your-username)
-- 项目主页: [STM32-MAX30102](https://github.com/your-username/STM32-MAX30102)
 
 ## 📚 参考资料
 
