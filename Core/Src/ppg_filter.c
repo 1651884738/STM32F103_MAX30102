@@ -97,15 +97,27 @@ static float detrend_signal(PPG_FilterState_t *filter, float value) {
  * @return 滤波后的AC信号
  */
 float PPG_Filter_Process(PPG_FilterState_t *filter, uint32_t raw_value) {
+    // 饱和保护：18位ADC最大值为262143
+    if (raw_value > 262143u) {
+        raw_value = 262143u;
+    }
+    
     float signal = (float)raw_value;
 
     // 1. 去趋势（去除基线漂移）
     float detrended = detrend_signal(filter, signal);
 
-    // 2. Butterworth 4阶带通滤波 (级联两个二阶节)
+    // 2. Butterworth 4阶带通滤波 (级联两个二阶节)，带饱和保护
     float filtered = detrended;
     for (uint8_t i = 0; i < NUM_SOS_SECTIONS; i++) {
         filtered = biquad_filter(filtered, &butterworth_sos[i], &filter->biquad_states[i]);
+        
+        // 饱和保护，防止数值溢出
+        if (filtered > 100000.0f) {
+            filtered = 100000.0f;
+        } else if (filtered < -100000.0f) {
+            filtered = -100000.0f;
+        }
     }
 
     // 3. 后处理平滑（3点移动平均）
@@ -118,8 +130,16 @@ float PPG_Filter_Process(PPG_FilterState_t *filter, uint32_t raw_value) {
     }
     smoothed /= SIGNAL_SMOOTH_SIZE;
 
-    // 4. 计算AC RMS（用于血氧计算）
-    filter->ac_squared_sum += smoothed * smoothed;
+    // 4. 计算AC RMS（用于血氧计算），带溢出保护
+    float squared = smoothed * smoothed;
+    
+    // 防止累加器溢出
+    if (filter->ac_squared_sum > 1e10f) {
+        filter->ac_squared_sum = 0.0f;
+        filter->sample_count = 0;
+    }
+    
+    filter->ac_squared_sum += squared;
     filter->sample_count++;
 
     return smoothed;

@@ -298,11 +298,12 @@ int main(void)
           // ========== 方法1: 时域峰值检测算法 ==========
 
           // 1. 滤波处理
-          float ac_red = PPG_Filter_Process(&red_filter, raw_red);
-          float ac_ir = PPG_Filter_Process(&ir_filter, raw_ir);
+                     float ac_red = PPG_Filter_Process(&red_filter, raw_red);
+                     float ac_ir = PPG_Filter_Process(&ir_filter, raw_ir);
 
-          // 2. 添加IR信号到心率缓冲区
-          HR_AddSample(&hr_state, ac_ir);
+                     // 2. 添加IR信号到心率缓冲区（优化内存使用）
+                                float ir_dc = PPG_Filter_GetDC(&ir_filter);
+                                HR_AddSample(&hr_state, ac_ir, ir_dc);
 
           // 2.1 更新波形显示（降采样）
           wave_sample_counter++;

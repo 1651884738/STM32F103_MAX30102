@@ -48,10 +48,10 @@ file(GLOB_RECURSE USER_LIB_SOURCES "lib/oled/src/*.c")
 
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME}
-        lib/oled/src/delay.c
-        lib/oled/inc/delay.h
-        lib/oled/src/soft_i2c.c
-        lib/oled/inc/soft_i2c.h
+        # lib/oled/src/delay.c
+        # lib/oled/inc/delay.h
+        # lib/oled/src/soft_i2c.c
+        # lib/oled/inc/soft_i2c.h
         lib/oled/src/max30102.c
         lib/oled/inc/max30102.h
         Core/Src/ppg_filter.c
@@ -77,10 +77,10 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
-        lib/oled/src/oled.c
-        lib/oled/src/font.c
-        lib/oled/src/delay.c
-        lib/oled/src/soft_i2c.c
+        # lib/oled/src/oled.c  # 临时禁用以节省内存
+        # lib/oled/src/font.c
+        # lib/oled/src/delay.c
+        # lib/oled/src/soft_i2c.c
         lib/oled/src/max30102.c
         Core/Src/ppg_filter.c
         Core/Src/ppg_algorithm.c
@@ -91,7 +91,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
-        lib/oled/inc
+        # lib/oled/inc  # 临时禁用以节省内存
         Drivers/CMSIS/Include
         Drivers/CMSIS/DSP/Include
         Drivers/STM32F1xx_HAL_Driver/Inc
@@ -118,3 +118,8 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     m
     # Add user defined libraries
 )
+
+# Optional: Add tests if not building for embedded target
+if(BUILD_TESTING AND NOT CMAKE_SYSTEM_NAME STREQUAL "Generic")
+    add_subdirectory(tests)
+endif()

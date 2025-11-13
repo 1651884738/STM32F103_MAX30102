@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 // 去趋势滤波器参数（移动平均窗口，用于计算基线）
-#define DETREND_WINDOW_SIZE  50    // 去趋势窗口大小（越大对慢速漂移效果越好）
+#define DETREND_WINDOW_SIZE  32    // 去趋势窗口大小（减少内存使用）
 
 // 信号后处理平滑
 #define SIGNAL_SMOOTH_SIZE   5     // 输出信号额外平滑窗口（5点移动平均）
