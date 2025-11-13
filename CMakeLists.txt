@@ -118,3 +118,30 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     m
     # Add user defined libraries
 )
+
+# ==================== Host-side Unit Tests ====================
+
+# Create a test executable for host system
+if(NOT TARGET ${CMAKE_PROJECT_NAME}_test)
+    add_executable(${CMAKE_PROJECT_NAME}_test
+        tests/dpt_method_test.c
+        Core/Src/ppg_algorithm_v2.c
+    )
+    
+    # Set compiler for host (not cross-compilation)
+    set_target_properties(${CMAKE_PROJECT_NAME}_test PROPERTIES
+        C_STANDARD 11
+        C_STANDARD_REQUIRED ON
+    )
+    
+    # Include directories for test
+    target_include_directories(${CMAKE_PROJECT_NAME}_test PRIVATE
+        Core/Inc
+    )
+    
+    # Link math library for host
+    target_link_libraries(${CMAKE_PROJECT_NAME}_test m)
+    
+    # Add test to CTest
+    add_test(NAME DPTMethodTest COMMAND ${CMAKE_PROJECT_NAME}_test)
+endif()
