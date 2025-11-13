@@ -104,6 +104,9 @@ typedef struct {
     bool hr_valid;
     bool spo2_valid;
 
+    // Performance metrics
+    uint32_t last_process_cycles;  // CPU cycles for last process call
+
 } DPT_State_t;
 
 /* ==================== Function Prototypes ==================== */
@@ -164,6 +167,26 @@ const float* DPT_GetSpectrum(const DPT_State_t *state, uint8_t channel);
  * @return Peak period in samples
  */
 uint16_t DPT_GetPeakPeriod(const DPT_State_t *state);
+
+/**
+ * @brief Get CPU cycles for last process call
+ * @param state Pointer to DPT state structure
+ * @return CPU cycles (0 if never called)
+ */
+uint32_t DPT_GetProcessCycles(const DPT_State_t *state);
+
+/**
+ * @brief Initialize DWT cycle counter for performance measurement
+ */
+void DPT_InitPerformance(void);
+
+/**
+ * @brief Get DC values for debugging (test only)
+ * @param state Pointer to DPT state structure
+ * @param red_dc Pointer to store red DC value
+ * @param ir_dc Pointer to store IR DC value
+ */
+void DPT_GetDebugDC(const DPT_State_t *state, float *red_dc, float *ir_dc);
 
 #ifdef __cplusplus
 }

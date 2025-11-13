@@ -10,6 +10,36 @@
 #include "ppg_algorithm_v2.h"
 #include <math.h>
 #include <string.h>
+#ifndef __ARM_ARCH
+#include <time.h>
+#endif
+
+/* Performance measurement using DWT cycle counter */
+#ifdef __ARM_ARCH
+#define DWT_CYCCNT     (*(volatile uint32_t *)0xE0001004U)
+#define DWT_CONTROL    (*(volatile uint32_t *)0xE0001000U)
+#define DWT_CTRL_CYCCNTENA  (1U << 0)
+
+static inline void dwt_init(void) {
+    DWT_CONTROL |= DWT_CTRL_CYCCNTENA;
+}
+
+static inline uint32_t dwt_get_cycles(void) {
+    return DWT_CYCCNT;
+}
+#else
+// Host system stubs
+static inline void dwt_init(void) {
+    // No-op on host system
+}
+
+static inline uint32_t dwt_get_cycles(void) {
+    // Return clock_gettime based measurement on host
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint32_t)(ts.tv_sec * 1000000000LL + ts.tv_nsec); // nanoseconds
+}
+#endif
 
 /* ==================== Private Constants ==================== */
 
@@ -84,6 +114,9 @@ void DPT_Process(DPT_State_t *state, uint32_t raw_red, uint32_t raw_ir)
 {
     if (state == NULL) return;
 
+    // Start performance measurement
+    uint32_t start_cycles = dwt_get_cycles();
+
     // Step 1: Extract AC and DC components using IIR filters
     iir_filter_process(&state->red_filter, (int32_t)raw_red);
     iir_filter_process(&state->ir_filter, (int32_t)raw_ir);
@@ -143,25 +176,39 @@ void DPT_Process(DPT_State_t *state, uint32_t raw_red, uint32_t raw_ir)
                                (1.0f - DPT_HR_EMA_ALPHA) * state->ema_hr;
             }
 
-            // 5. Update final heart rate
-            state->heart_rate = state->ema_hr;
-            state->last_valid_hr = state->ema_hr;
+            // 5. Additional smoothing using hr_history buffer
+            state->hr_history[state->hr_index] = state->ema_hr;
+            state->hr_index = (state->hr_index + 1) % DPT_HR_SMOOTH_SIZE;
+            float smoothed_hr = smooth_array(state->hr_history, DPT_HR_SMOOTH_SIZE);
 
-            // 6. Stability validation: check if change is small
-            float change = fabsf(state->heart_rate - state->last_valid_hr);
+            // 6. Stability validation: check if change is small (before updating last_valid_hr)
+            float change = 0.0f;
+            if (state->last_valid_hr > 0.0f) {
+                change = fabsf(smoothed_hr - state->last_valid_hr);
+            }
             if (change < 3.0f) {  // Change less than 3 bpm
                 state->stable_count++;
             } else {
                 state->stable_count = 0;
             }
 
-            // 7. Mark as valid if stable for at least 2 readings
+            // 7. Update final heart rate and last valid
+            state->heart_rate = smoothed_hr;
+            state->last_valid_hr = smoothed_hr;
+
+            // 8. Mark as valid if stable for at least 2 readings
             state->hr_valid = (state->stable_count >= 2);
         } else {
+            // Reset HR validation state on invalid range
             state->hr_valid = false;
+            state->stable_count = 0;
+            state->ema_hr = 0.0f;  // Reset EMA to force re-initialization
         }
     } else {
+        // Reset HR validation state on no peak found
         state->hr_valid = false;
+        state->stable_count = 0;
+        state->ema_hr = 0.0f;  // Reset EMA to force re-initialization
     }
 
     // Step 7: Calculate SpO2 using R-value method
@@ -199,11 +246,25 @@ void DPT_Process(DPT_State_t *state, uint32_t raw_red, uint32_t raw_ir)
                                     state->spo2 <= MAX_SPO2);
             } else {
                 state->spo2_valid = false;
+                // Reset R-value history on invalid IR ratio
+                memset(state->r_history, 0, sizeof(state->r_history));
+                state->r_index = 0;
             }
+        } else {
+            // Reset R-value history on invalid peak index
+            state->spo2_valid = false;
+            memset(state->r_history, 0, sizeof(state->r_history));
+            state->r_index = 0;
         }
     } else {
+        // Reset R-value history on insufficient signal
         state->spo2_valid = false;
+        memset(state->r_history, 0, sizeof(state->r_history));
+        state->r_index = 0;
     }
+
+    // End performance measurement
+    state->last_process_cycles = dwt_get_cycles() - start_cycles;
 }
 
 /**
@@ -263,6 +324,34 @@ uint16_t DPT_GetPeakPeriod(const DPT_State_t *state)
 {
     if (state == NULL) return 0;
     return state->peak_period;
+}
+
+/**
+ * @brief Get CPU cycles for last process call
+ */
+uint32_t DPT_GetProcessCycles(const DPT_State_t *state)
+{
+    if (state == NULL) return 0;
+    return state->last_process_cycles;
+}
+
+/**
+ * @brief Initialize DWT cycle counter for performance measurement
+ */
+void DPT_InitPerformance(void)
+{
+    dwt_init();
+}
+
+/**
+ * @brief Get DC values for debugging (test only)
+ */
+void DPT_GetDebugDC(const DPT_State_t *state, float *red_dc, float *ir_dc)
+{
+    if (state == NULL || red_dc == NULL || ir_dc == NULL) return;
+    
+    *red_dc = (float)state->red_filter.dc_value;
+    *ir_dc = (float)state->ir_filter.dc_value;
 }
 
 /* ==================== Private Function Implementations ==================== */
@@ -362,9 +451,8 @@ static void dpt_transform_process(DPT_Transform_t *dpt, int32_t ac_value,
 
         // Get old sample that's being removed (period samples ago)
         // current_idx points to the sample we just wrote
-        // current_idx - period + 1 is the oldest sample in this period window
-        // But since we incremented buffer_index, we need to use current_idx
-        uint16_t old_idx = (current_idx + DPT_BUFFER_SIZE - period + 1) % DPT_BUFFER_SIZE;
+        // The sample being removed is exactly 'period' samples before current_idx
+        uint16_t old_idx = (current_idx + DPT_BUFFER_SIZE - period) % DPT_BUFFER_SIZE;
         float old_sample = (float)dpt->recursive_buffer[old_idx];
 
         // Complex rotation using basis functions
@@ -419,17 +507,39 @@ static uint16_t find_peak_period(const DPT_Transform_t *dpt)
 
     float max_magnitude = 0.0f;
     uint16_t peak_index = 0;
+    float median_magnitude = 0.0f;
 
-    // Find maximum in spectrum
+    // Find maximum in spectrum and collect values for median
+    float magnitudes[DPT_PERIOD_RANGE];
     for (uint16_t i = 0; i < DPT_PERIOD_RANGE; i++) {
+        magnitudes[i] = dpt->magnitude[i];
         if (dpt->magnitude[i] > max_magnitude) {
             max_magnitude = dpt->magnitude[i];
             peak_index = i;
         }
     }
 
-    // Validate peak
-    if (max_magnitude < MIN_PEAK_MAGNITUDE) {
+    // Compute adaptive threshold based on median spectrum energy
+    // Simple median calculation for small array
+    for (uint16_t i = 0; i < DPT_PERIOD_RANGE - 1; i++) {
+        for (uint16_t j = 0; j < DPT_PERIOD_RANGE - i - 1; j++) {
+            if (magnitudes[j] > magnitudes[j + 1]) {
+                float temp = magnitudes[j];
+                magnitudes[j] = magnitudes[j + 1];
+                magnitudes[j + 1] = temp;
+            }
+        }
+    }
+    median_magnitude = magnitudes[DPT_PERIOD_RANGE / 2];
+
+    // Adaptive threshold: peak must be significantly above median
+    float adaptive_threshold = MIN_PEAK_MAGNITUDE + median_magnitude * 0.5f;
+    if (adaptive_threshold < MIN_PEAK_MAGNITUDE) {
+        adaptive_threshold = MIN_PEAK_MAGNITUDE;
+    }
+
+    // Validate peak against adaptive threshold
+    if (max_magnitude < adaptive_threshold) {
         return 0;
     }
 
